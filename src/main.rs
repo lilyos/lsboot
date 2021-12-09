@@ -101,7 +101,7 @@ fn load_efi(st: SystemTable<Boot>, image: Handle, elf_s: Elf, elf_buf: &mut [u8]
         let index = header.p_vaddr - to_sub;
         let data = &elf_buf[header.p_offset as usize..][..header.p_filesz as usize];
         info!("Writing V_ADDR {}, INDEX: {}, LEN: {}", header.p_vaddr, index, data.len());
-        memory[index as usize..data.len()].copy_from_slice(data);
+        memory[index as usize..][..data.len()].copy_from_slice(data);
         info!("Wrote V_ADDR {}, INDEX: {}, LEN: {}", header.p_vaddr, index, data.len());
     }
 
