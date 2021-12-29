@@ -73,12 +73,6 @@ pub extern "efiapi" fn efi_main(image: Handle, mut st: SystemTable<Boot>) -> Sta
                 in(reg) kernel_stack,
                 options(noreturn)
             )
-            /*
-            asm!("cli");
-            asm!("mov r8, {}", in(reg) kernel_entry);
-            asm!("mov rsp, {}", in(reg) kernel_stack);
-            asm!("jmp r8", options(noreturn));
-            */
         }
     } else {
         panic!("FAILED: SELF TEST DIDN'T RETURN EXPECTED RESULTS");
