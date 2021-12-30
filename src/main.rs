@@ -20,8 +20,8 @@ use uefi::{
 
 use core::arch::asm;
 
-// mod utility;
-// use utility::*;
+mod utility;
+use utility::*;
 
 #[macro_use]
 mod elf;
@@ -32,7 +32,15 @@ pub extern "efiapi" fn efi_main(image: Handle, mut st: SystemTable<Boot>) -> Sta
 
     info!("Loading Lotus");
 
-    // get_memory_map(st.boot_services());
+    let entries = get_memory_map(st.boot_services());
+    let mut mmap = Vec::new();
+    let _ = entries
+        .iter()
+        .map(|i| mmap.push(MemoryEntry::from_mem_desc(&i)))
+        .collect::<Vec<_>>();
+    let mmap = mmap.as_slice();
+    info!("{:#?}", entries);
+    info!("{:#?}", mmap);
 
     let prop = st
         .boot_services()
@@ -66,11 +74,14 @@ pub extern "efiapi" fn efi_main(image: Handle, mut st: SystemTable<Boot>) -> Sta
         unsafe {
             asm!(
                 "cli",
-                "mov r8, {0}",
-                "mov rsp, {1}",
+                // "mov r8, {0}",
+                // "mov r9, {1}",
+                "mov rsp, {}",
                 "jmp r8",
-                in(reg) kernel_entry,
                 in(reg) kernel_stack,
+                in("r8") kernel_entry,
+                in("r9") mmap.as_ptr(),
+                in("r10") mmap.len(),
                 options(noreturn)
             )
         }
