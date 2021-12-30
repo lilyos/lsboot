@@ -1,14 +1,23 @@
 use uefi::table::boot::{BootServices, MemoryDescriptor, MemoryType};
 
-use core::{arch::asm, fmt::Debug};
+use core::fmt::Debug;
 
 use alloc::vec::Vec;
+
+#[repr(C)]
+#[derive(Debug)]
+enum MemoryKind {
+    Reclaim,
+    ACPIReclaim,
+    ACPINonVolatile,
+}
 
 #[repr(C)]
 #[derive(Debug)]
 pub struct MemoryEntry {
     start: usize,
     end: usize,
+    kind: MemoryKind,
 }
 
 impl MemoryEntry {
@@ -19,6 +28,13 @@ impl MemoryEntry {
                 (memd.phys_start + (memd.page_count * 4096 - 1)) as usize,
                 4096,
             ),
+            kind: if memd.ty == MemoryType::ACPI_NON_VOLATILE {
+                MemoryKind::ACPINonVolatile
+            } else if memd.ty == MemoryType::ACPI_RECLAIM {
+                MemoryKind::ACPIReclaim
+            } else {
+                MemoryKind::Reclaim
+            },
         }
     }
 
@@ -28,7 +44,7 @@ impl MemoryEntry {
 }
 
 pub fn get_memory_map(bt: &BootServices) -> Vec<MemoryDescriptor> {
-    let (mut buffer, size) = mmap_buffer(bt);
+    let (buffer, size) = mmap_buffer(bt);
     let mut unit_buffer = unsafe { core::slice::from_raw_parts_mut(buffer, size) };
     let (_mmap_key, mmap_iter) = die_if_failure(bt.memory_map(&mut unit_buffer));
     assert!(mmap_iter.len() > 0, "Memory map is empty");
@@ -47,6 +63,8 @@ pub fn get_memory_map(bt: &BootServices) -> Vec<MemoryDescriptor> {
             i.ty == MemoryType::BOOT_SERVICES_CODE
                 || i.ty == MemoryType::BOOT_SERVICES_DATA
                 || i.ty == MemoryType::CONVENTIONAL
+                || i.ty == MemoryType::ACPI_RECLAIM
+                || i.ty == MemoryType::ACPI_NON_VOLATILE
         })
         .collect();
 

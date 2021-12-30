@@ -39,8 +39,8 @@ pub extern "efiapi" fn efi_main(image: Handle, mut st: SystemTable<Boot>) -> Sta
         .map(|i| mmap.push(MemoryEntry::from_mem_desc(&i)))
         .collect::<Vec<_>>();
     let mmap = mmap.as_slice();
-    info!("{:#?}", entries);
-    info!("{:#?}", mmap);
+    // info!("{:#?}", entries);
+    // info!("{:#?}", mmap);
 
     let prop = st
         .boot_services()
@@ -68,6 +68,7 @@ pub extern "efiapi" fn efi_main(image: Handle, mut st: SystemTable<Boot>) -> Sta
             "Jumping to Lotus entry {:?}, Stack at {:?}",
             kernel_entry, kernel_stack
         );
+        // info!("Ptr: {:?}, Len: {}", mmap.as_ptr(), mmap.len());
 
         elf::exit_boot_services!(st, image);
 
