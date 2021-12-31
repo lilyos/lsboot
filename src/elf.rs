@@ -21,6 +21,7 @@ macro_rules! allocate_elf_memory {
             "Allocated {} pages for elf and {} for stack",
             p_size, $s_size
         );
+        info!("Offset: {:?}", pointer);
         unsafe {
             (core::slice::from_raw_parts_mut(pointer, (p_size + $s_size) * 4096)).fill(0);
             let mem: &mut [u8] =
@@ -131,14 +132,39 @@ macro_rules! load_elf {
 
 pub(crate) use load_elf;
 
+/*
 macro_rules! exit_boot_services {
     ($st:ident, $image:ident) => {{
+        use crate::utility::{MemoryEntry, MemoryKind};
         use log::info;
+        use uefi::table::boot::{MemoryDescriptor, MemoryType};
+
         info!("EXITING BOOT SERVICES");
-        let mut buffer = [0u8; 4096];
-        let (_st, _mmap) = $st
+
+        let map_sz = $st.boot_services().memory_map_size();
+
+        let buf_sz = map_sz + 2 * core::mem::size_of::<MemoryDescriptor>();
+
+        let mut buffer = vec![0_u8; buf_sz];
+        let mut buffer2 =
+            vec![MemoryEntry::new(); (buf_sz / core::mem::size_of::<MemoryDescriptor>())];
+
+        let (_st, mmap) = $st
             .exit_boot_services($image, &mut buffer)
             .expect_success("FAILED: BOOT SERVICES NOT EXITED");
+
+        mmap.enumerate()
+            .filter(|(index, i)| {
+                i.ty == MemoryType::BOOT_SERVICES_CODE
+                    || i.ty == MemoryType::BOOT_SERVICES_DATA
+                    || i.ty == MemoryType::CONVENTIONAL
+                    || i.ty == MemoryType::ACPI_RECLAIM
+                    || i.ty == MemoryType::ACPI_NON_VOLATILE
+            })
+            .map(|(i, item)| buffer2[i] = { MemoryEntry::from_mem_desc(item) });
+
+        buffer2
     }};
 }
 pub(crate) use exit_boot_services;
+*/

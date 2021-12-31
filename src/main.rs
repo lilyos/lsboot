@@ -15,13 +15,14 @@ use uefi::{
         file::{File, FileAttribute, FileMode, FileType},
         fs::SimpleFileSystem,
     },
+    table::boot::{MemoryDescriptor, MemoryType},
     ResultExt,
 };
 
 use core::arch::asm;
 
-mod utility;
-use utility::*;
+// mod utility;
+// use utility::*;
 
 #[macro_use]
 mod elf;
@@ -31,16 +32,6 @@ pub extern "efiapi" fn efi_main(image: Handle, mut st: SystemTable<Boot>) -> Sta
     uefi_services::init(&mut st).expect_success("FAILED: BOOT SERVICES UNRESPONSIVE");
 
     info!("Loading Lotus");
-
-    let entries = get_memory_map(st.boot_services());
-    let mut mmap = Vec::new();
-    let _ = entries
-        .iter()
-        .map(|i| mmap.push(MemoryEntry::from_mem_desc(&i)))
-        .collect::<Vec<_>>();
-    let mmap = mmap.as_slice();
-    // info!("{:#?}", entries);
-    // info!("{:#?}", mmap);
 
     let prop = st
         .boot_services()
@@ -55,7 +46,7 @@ pub extern "efiapi" fn efi_main(image: Handle, mut st: SystemTable<Boot>) -> Sta
     let (kernel_stack, kernel_entry) = elf::load_elf!(k_buf, 4, st);
     let (_, test_entry) = elf::load_elf!(t_buf, 0, st);
 
-    info!("Test entry: {:?}", test_entry);
+    // info!("Test entry: {:?}", test_entry);
 
     let chk = u64::MAX;
 
@@ -68,9 +59,30 @@ pub extern "efiapi" fn efi_main(image: Handle, mut st: SystemTable<Boot>) -> Sta
             "Jumping to Lotus entry {:?}, Stack at {:?}",
             kernel_entry, kernel_stack
         );
-        // info!("Ptr: {:?}, Len: {}", mmap.as_ptr(), mmap.len());
 
-        elf::exit_boot_services!(st, image);
+        info!("EXITING BOOT SERVICES");
+
+        let map_sz = st.boot_services().memory_map_size();
+
+        let buf_sz = map_sz + 2 * core::mem::size_of::<MemoryDescriptor>();
+
+        let alloc_ptr = st
+            .boot_services()
+            .allocate_pool(MemoryType::LOADER_DATA, buf_sz)
+            .expect_success("FAILED: COULDN'T ALLOCATE MEMORY");
+
+        let mut buffer = unsafe { core::slice::from_raw_parts_mut(alloc_ptr as *mut u8, buf_sz) };
+
+        let (_st, mmap_iter) = st
+            .exit_boot_services(image, &mut buffer)
+            .expect_success("FAILED: BOOT SERVICES NOT EXITED");
+
+        let mmap = unsafe {
+            core::slice::from_raw_parts_mut(alloc_ptr as *mut MemoryDescriptor, mmap_iter.len())
+        };
+        for (i, entry) in mmap_iter.enumerate() {
+            mmap[i] = *entry;
+        }
 
         unsafe {
             asm!(
@@ -81,7 +93,7 @@ pub extern "efiapi" fn efi_main(image: Handle, mut st: SystemTable<Boot>) -> Sta
                 "jmp r8",
                 in(reg) kernel_stack,
                 in("r8") kernel_entry,
-                in("r9") mmap.as_ptr(),
+                in("r9") mmap.as_ptr() as *const MemoryDescriptor,
                 in("r10") mmap.len(),
                 options(noreturn)
             )
